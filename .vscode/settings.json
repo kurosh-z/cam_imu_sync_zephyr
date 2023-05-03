@@ -1,0 +1,17 @@
+{
+  "C_Cpp.default.configurationProvider": "nrf-connect",
+  "nrf-connect.applications": ["${workspaceFolder}"],
+  "nrf-connect.topdir": "${nrf-connect.sdk:2.2.0}",
+  "nrf-connect.toolchain.path": "${nrf-connect.toolchain:2.2.0}",
+  "files.associations": {
+    "segger_rtt.h": "c",
+    "imu.h": "c",
+    "string.h": "c",
+    "uart_com.h": "c",
+    "stdio.h": "c",
+    "device.h": "c",
+    "devicetree.h": "c",
+    "log.h": "c",
+    "trigger.h": "c"
+  }
+}
