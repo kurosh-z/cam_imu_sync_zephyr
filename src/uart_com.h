@@ -25,18 +25,7 @@
 #define CMD_SET_EXPOSURE "CMD_SET_EXPOSURE"
 #define CMD_TRIGGER "CMD_TRIGGER"
 
-enum TriggerState {
-  TRIGGER_STATE_STOP,
-  TRIGGER_STATE_START,
-  TRIGGER_STATE_PAUSE
-};
-
-typedef struct icState_t {
-  uint8_t trigger_state;
-  uint32_t exposure;
-} icState_t;
-
 int init_uart_com();
 uint8_t send_data_uart(uint8_t *data, size_t len);
-void get_current_icState(icState_t *state);
+
 #endif

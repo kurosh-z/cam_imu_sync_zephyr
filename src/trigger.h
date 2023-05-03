@@ -9,6 +9,7 @@
 #include <zephyr/sys/printk.h>
 
 int init_trigger_dev();
-void set_trigger_low(uint32_t delay_us);
-void set_trigger_high(uint32_t delay_us);
+void schedule_trigger_low(uint32_t delay_us);
+void schedule_trigger_high(uint32_t delay_us);
+void set_trigger_high_now();
 #endif

@@ -12,6 +12,11 @@
     "device.h": "c",
     "devicetree.h": "c",
     "log.h": "c",
-    "trigger.h": "c"
+    "trigger.h": "c",
+    "app_state.h": "c",
+    "stddef.h": "c",
+    "kernel.h": "c",
+    "gpio.h": "c",
+    "printk.h": "c"
   }
 }

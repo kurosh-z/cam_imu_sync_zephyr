@@ -15,13 +15,6 @@ const struct device *uart = DEVICE_DT_GET(DT_NODELABEL(uart0));
 static uint8_t tx_buf[TX_BUFF_SIZE] = {0};
 static uint8_t rx_buf[RECEIVE_BUFF_SIZE] = {0};
 static uint8_t end_of_msg[END_OF_MSG_LEN] = END_OF_MSG;
-static icState_t icState = {.exposure = -1,
-                            .trigger_state = TRIGGER_STATE_STOP};
-
-void get_current_icState(icState_t *state) {
-  state->exposure = icState.exposure;
-  state->trigger_state = icState.trigger_state;
-}
 
 static void uart_callback(const struct device *dev, struct uart_event *evt,
                           void *user_data) {
