@@ -10,3 +10,5 @@ target_sources(app PRIVATE src/main.c)
 target_sources(app PRIVATE src/uart_com.c)
 target_sources(app PRIVATE src/imu.c)
 target_sources(app PRIVATE src/trigger.c)
+target_sources(app PRIVATE src/app_state.c)
+

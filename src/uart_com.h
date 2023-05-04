@@ -26,6 +26,6 @@
 #define CMD_TRIGGER "CMD_TRIGGER"
 
 int init_uart_com();
-uint8_t send_data_uart(uint8_t *data, size_t len);
+int send_data_uart(uint8_t buff_num);
 
 #endif

@@ -1,5 +1,6 @@
 #include "trigger.h"
 #include "app_state.h"
+#include "imu.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS 1000
@@ -52,20 +53,36 @@ void trigger_entry(void) {
   while (is_app_initialized() == false || get_exposure() == -1) {
     k_msleep(500);
   }
+  uint32_t start = 0;
+  uint32_t end = 0;
+  struct imu_buff_t *buff1 = get_buffer1_ptr();
 
+  if (buff1 == NULL) {
+    while (1) {
+      printk("[trigger.c] PANIC: buff1 is null!!!\n");
+      k_sleep(K_SECONDS(5));
+    }
+  }
   while (1) {
+    start = k_cycle_get_32();
     set_trigger_high_now();
     schedule_trigger_low(TOGGLE_DELAY_US);
     // schedule imu_read
     uint32_t exposure_ms = get_exposure();
-    uint32_t time_delay_us = exposure_ms * 1000 / 2 - IMU_READ_TIME_US;
+    uint32_t time_delay_us = exposure_ms * 1000 / 2 - IMU_READ_TIME_US / 2;
+    buff1->trig_timestamp = k_cyc_to_us_floor32(start);
+    buff1->trig_seq++;
     schedule_imu_read_triggered(time_delay_us);
-    k_sleep(K_USEC(TRIGGER_INTERVAL_US));
+    // TODO: should you also send  imu data here?
+    k_sleep(K_USEC(TRIGGER_INTERVAL_US - 108));
+    // k_msleep(4);
+    end = k_cycle_get_32();
+    // printk("trigger interval: %d us\n", k_cyc_to_us_floor32(end - start));
   }
 }
 
-K_THREAD_DEFINE(trigger_thread_id, 2048, trigger_entry, NULL, NULL, NULL, 1, 0,
-                0);
+K_THREAD_DEFINE(trigger_thread_id, 2048, trigger_entry, NULL, NULL, NULL,
+                TRIGGER_THREAD_PRIORITY, 0, 0);
 
 // void trigger_entry(void) {
 

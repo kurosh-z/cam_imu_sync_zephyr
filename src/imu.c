@@ -73,14 +73,22 @@ int process_mpu9250(bool triggered) {
     }
     // TODO: add timestamp- add triggered flag to imu_data
     if (triggered) {
-      set_buffer1(imu_data, 80);
+      imu_data[80] = triggered;
+      sys_put_be64(get_buffer1_trig_seq(), imu_data + 81);       // 8 bytes
+      encode_int32(get_buffer1_trig_timestamp(), imu_data + 89); // 4 bytes -->
+      set_buffer1(imu_data, 93);
       set_buffer1_state(IMU_BUFF_STATE_WAITING);
+    } else {
+      imu_data[80] = triggered;
+      set_buffer2(imu_data, 81);
+      set_buffer2_state(IMU_BUFF_STATE_WAITING);
     }
 
     // imu_data[80] = triggered;                      // 1 byte
     // encode_int32(process_delay_us, imu_data + 81); // 4 bytes --> 85 bytes
     // printk("process delay [us]: %d\n", process_delay_us);
   }
+  return rc;
 }
 
 void imu_read_handler_triggered(struct k_work *work) { process_mpu9250(true); }
@@ -101,6 +109,22 @@ int init_imu() {
   return 0;
 }
 
+void imu_entry(void) {
+  SEGGER_RTT_Init();
+  k_msleep(1000);
+  printk("imu thread is started\n");
+  while (!is_app_initialized()) {
+    k_msleep(800);
+  }
+  while (1) {
+    process_mpu9250(false);
+    k_sleep(
+        Z_TIMEOUT_US((uint32_t)(2481))); // TODO: see if this time still valid
+  }
+}
+
+K_THREAD_DEFINE(imu_thread_id, 1024 * 2, imu_entry, NULL, NULL, NULL,
+                IMU_THREAD_PRIORITY, 0, 0);
 // void imu_entry(void) {
 //   SEGGER_RTT_Init();
 //   k_sleep(K_SECONDS(3));
@@ -139,6 +163,3 @@ int init_imu() {
 
 //   /* triggered runs with its own thread after exit */
 // }
-
-// K_THREAD_DEFINE(imu_thread_id, IMU_STACK_SIZE, imu_entry, NULL, NULL, NULL,
-//                 IMU_PRIORITY, 0, 0);

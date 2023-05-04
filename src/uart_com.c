@@ -10,6 +10,7 @@
  */
 
 #include "uart_com.h"
+#include "app_state.h"
 
 const struct device *uart = DEVICE_DT_GET(DT_NODELABEL(uart0));
 static uint8_t tx_buf[TX_BUFF_SIZE] = {0};
@@ -69,48 +70,9 @@ int init_uart_com() {
   return 0;
 }
 
-struct data_out {
-  uint64_t cnt;
-  uint8_t dummy1;
-  uint8_t arr[10];
-};
-const char *OUT_FORMAT = "%llu,%d,%s\n";
-
-struct data_out data_out = {.cnt = 0, .dummy1 = 0, .arr = "testing"};
-void fill_tx_with_data() {
-  data_out.cnt++;
-  data_out.dummy1 = (uint8_t)(data_out.cnt / 2);
-  // printf("[uart_com.c] fill_tx_with_data ... \n");
-  memset(tx_buf, 0, sizeof(tx_buf));
-  // printk("\n-----------");
-  // printk("cnt: %llu \n", data_out.cnt);
-  snprintf(tx_buf, sizeof(tx_buf), OUT_FORMAT, data_out.cnt, data_out.dummy1,
-           data_out.arr);
-  printk("tx_buf: %s \n", tx_buf);
-  // for (int i = 0; i < strlen(tx_buf); i++) {
-  //   // tx_buf[i] = i;
-  //   printk("0x%x -  ", tx_buf[i]);
-  // }
-  // printk("\n");
-
-  int err = uart_tx(uart, tx_buf, strlen(tx_buf), TX_BUFF_TIMEOUT_MS);
-  // test unpacking
-  // printf("\n\n unpacking ... \n\n");
-  // uint64_t cnt = 0;
-  // for (int i = 7; i >= 0; i--) {
-  //   uint8_t sh = 8 * i;
-  //   printk(" tx_buf[%d] << %d: 0x%x \n", i, sh, tx_buf[i] << 8 * i);
-  //   cnt = cnt | tx_buf[i] << 8 * (i);
-  // }
-
-  // while (1) {
-  // printk("data_cnt: %lld, cnt: %lld \n", data_cnt, cnt);
-  // printk("diff: %lld", cnt - data_cnt);
-
-  // }
-}
-
-uint8_t send_data_uart(uint8_t *data, size_t len) {
+int send_data_uart(uint8_t buff_num) {
+  // printk("[uart_com.c] send_data_uart ... \n");
+  int len = buff_num == 1 ? get_buffer1_len() : get_buffer2_len();
   int ret;
   int _len = len + END_OF_MSG_LEN;
   if (_len > TX_BUFF_SIZE) {
@@ -119,7 +81,14 @@ uint8_t send_data_uart(uint8_t *data, size_t len) {
   }
 
   memset(tx_buf, 0, sizeof(tx_buf));
-  memcpy(tx_buf, data, len);
+  if (buff_num == 1) {
+    get_buffer1(tx_buf);
+  } else if (buff_num == 2) {
+    get_buffer2(tx_buf);
+  } else {
+    printk("ERROR: expected buff_num 1 or 2  got %d\n", buff_num);
+    return -200;
+  }
   memcpy(tx_buf + len, end_of_msg, END_OF_MSG_LEN);
   // printk("tx_buf: \n");
   // for (int i = 0; i < _len; i++) {
@@ -131,25 +100,26 @@ uint8_t send_data_uart(uint8_t *data, size_t len) {
   return ret;
 }
 
-// void uart_entry(void) {
-//   SEGGER_RTT_Init();
-//   printk("[uart_com.c] uart_entry ... \n");
-//   int ret = init_uart_com();
-//   if (ret) {
-//     while (1) {
-//       printk("[uart_com.c/uart_entry] init_uart_com failed \n");
-//     }
-//   }
-//   k_msleep(1000);
-//   while (1) {
+void uart_entry(void) {
+  SEGGER_RTT_Init();
+  k_msleep(500);
+  printk("[uart_com.c] uart_entry ... \n");
+  while (!is_app_initialized()) {
+    k_msleep(500);
+  }
 
-//     fill_tx_with_data();
-//     // ret = send_data_uart();
-//     // printk("[uart_com.c/uart_entry] send_data_uart %d \n", ret);
-//     k_msleep(5000);
-//   }
-// }
+  while (1) {
+    if (get_buffer1_state() == IMU_BUFF_STATE_WAITING) {
+      send_data_uart(1);
+      set_buffer1_state(IMU_BUFF_STATE_SENT);
+    }
+    if (get_buffer2_state() == IMU_BUFF_STATE_WAITING) {
+      send_data_uart(2);
+      set_buffer2_state(IMU_BUFF_STATE_SENT);
+    }
+    k_sleep(K_USEC(500));
+  }
+}
 
-// K_THREAD_DEFINE(uart_thread_id, UART_STACK_SIZE, uart_entry, NULL, NULL,
-// NULL,
-//                 UART_PRIORITY, 0, 0);
+K_THREAD_DEFINE(uart_thread_id, 2 * 1024, uart_entry, NULL, NULL, NULL,
+                UART_THREAD_PRIORITY, 0, 0);
