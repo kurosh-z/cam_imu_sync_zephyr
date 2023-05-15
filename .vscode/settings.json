@@ -17,6 +17,12 @@
     "stddef.h": "c",
     "kernel.h": "c",
     "gpio.h": "c",
-    "printk.h": "c"
+    "printk.h": "c",
+    "timing.h": "c",
+    "_timeval.h": "c",
+    "byteorder.h": "c"
+  },
+  "nrf-connect.debugging.bindings": {
+    "${workspaceFolder}/build": "Launch build"
   }
 }

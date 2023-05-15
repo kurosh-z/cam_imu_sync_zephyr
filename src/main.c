@@ -14,7 +14,7 @@
 void main(void) {
 
   SEGGER_RTT_Init();
-  k_msleep(1000);
+  k_msleep(3000);
   printk("[main.c/main] starting imu driver ....\n");
 
   int err = 0;

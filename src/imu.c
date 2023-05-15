@@ -15,15 +15,15 @@ static inline void encode_int32(int32_t n, uint8_t *bytes) {
 
 static inline void put_sensor_val_to_buf(const struct sensor_value *val,
                                          uint8_t *buf, int i) {
-  // put valX
-  encode_int32(val[0].val1, buf + 8 + 24 * i);
-  encode_int32(val[0].val2, buf + 8 + 24 * i + 4);
+  // put valX  //  imu_seq + imu_timestamp -> 16 bytes
+  encode_int32(val[0].val1, buf + 16 + 24 * i);
+  encode_int32(val[0].val2, buf + 16 + 24 * i + 4); // +8 bytes
   // put valY
-  encode_int32(val[1].val1, buf + 16 + 24 * i);
-  encode_int32(val[1].val2, buf + 16 + 24 * i + 4);
+  encode_int32(val[1].val1, buf + 24 + 24 * i);
+  encode_int32(val[1].val2, buf + 24 + 24 * i + 4); // +8 bytes
   // put valZ
-  encode_int32(val[2].val1, buf + 24 + 24 * i);
-  encode_int32(val[2].val2, buf + 24 + 24 * i + 4);
+  encode_int32(val[2].val1, buf + 32 + 24 * i);
+  encode_int32(val[2].val2, buf + 32 + 24 * i + 4); // +8 bytes
 }
 
 int process_mpu9250(bool triggered) {
@@ -31,15 +31,18 @@ int process_mpu9250(bool triggered) {
     printk("mpu9250_dev is NULL");
     return -100;
   }
+
   uint8_t imu_data[IMU_DATA_MAX_LEN];
+  memset(imu_data, 0, IMU_DATA_MAX_LEN);
   // struct sensor_value temperature;
   struct sensor_value accel[3];
   struct sensor_value gyro[3];
   struct sensor_value magn[3];
-  uint32_t start = k_cycle_get_32();
+
+  uint64_t imu_timestamp = k_ticks_to_us_floor64(k_uptime_ticks());
   int rc = sensor_sample_fetch(mpu9250_dev);
-  uint32_t end = k_cycle_get_32();
-  uint32_t process_delay_us = k_cyc_to_us_floor32(end - start);
+  // uint32_t end = k_cycle_get_32();
+  // uint32_t process_delay_us = k_cyc_to_us_floor32(end - start);
 
   if (rc == 0) {
     rc = sensor_channel_get(mpu9250_dev, SENSOR_CHAN_ACCEL_XYZ, accel);
@@ -53,8 +56,11 @@ int process_mpu9250(bool triggered) {
 
   if (rc == 0) {
     uint64_t imu_seq = increase_imu_seq();
+    sys_put_be64(imu_seq, imu_data);
+    // 8 bytes
+    // sys_put_be32(k_cyc_to_us_floor32(start), imu_data + 8); // 4 bytes
+    sys_put_be64(imu_timestamp, imu_data + 8); // 8 bytes
 
-    sys_put_be64(imu_seq, imu_data); // 8 bytes
     for (int i = 0; i < 3; i++) {
       switch (i) {
       case 0:
@@ -71,16 +77,17 @@ int process_mpu9250(bool triggered) {
         break;
       }
     }
+    // 16 + 24*3 = 88 bytes
     // TODO: add timestamp- add triggered flag to imu_data
     if (triggered) {
-      imu_data[80] = triggered;
-      sys_put_be64(get_buffer1_trig_seq(), imu_data + 81);       // 8 bytes
-      encode_int32(get_buffer1_trig_timestamp(), imu_data + 89); // 4 bytes -->
-      set_buffer1(imu_data, 93);
+      imu_data[88] = triggered;                                  // 1 byte
+      sys_put_be64(get_buffer1_trig_seq(), imu_data + 89);       // 8 bytes
+      sys_put_be64(get_buffer1_trig_timestamp(), imu_data + 97); // 8 bytes
+      set_buffer1(imu_data, 107);
       set_buffer1_state(IMU_BUFF_STATE_WAITING);
     } else {
-      imu_data[80] = triggered;
-      set_buffer2(imu_data, 81);
+      imu_data[89] = triggered;
+      set_buffer2(imu_data, 90);
       set_buffer2_state(IMU_BUFF_STATE_WAITING);
     }
 
@@ -123,43 +130,5 @@ void imu_entry(void) {
   }
 }
 
-K_THREAD_DEFINE(imu_thread_id, 1024 * 2, imu_entry, NULL, NULL, NULL,
-                IMU_THREAD_PRIORITY, 0, 0);
-// void imu_entry(void) {
-//   SEGGER_RTT_Init();
-//   k_sleep(K_SECONDS(3));
-//   printk("starting imu \n");
-//   // const struct device *mpu9250 = DEVICE_DT_GET(DT_NODELABEL(i2c0));
-//   const struct device *mpu9250 = DEVICE_DT_GET_ONE(invensense_mpu9250);
-
-//   if (!device_is_ready(mpu9250)) {
-//     while (1) {
-//       printk("Device %s is not ready\n", mpu9250->name);
-//       k_sleep(K_SECONDS(4));
-//     }
-//     return;
-//   }
-
-// #ifdef CONFIG_MPU9250_TRIGGER
-//   trigger = (struct sensor_trigger){
-//       .type = SENSOR_TRIG_DATA_READY,
-//       .chan = SENSOR_CHAN_ALL,
-//   };
-//   if (sensor_trigger_set(mpu9250, &trigger, handle_mpu9250_drdy) < 0) {
-//     printk("Cannot configure trigger\n");
-//     return;
-//   }
-//   printk("Configured for triggered sampling.\n");
-// #endif
-
-//   while (!IS_ENABLED(CONFIG_MPU9250_TRIGGER)) {
-//     int rc = process_mpu9250(mpu9250);
-
-//     if (rc != 0) {
-//       break;
-//     }
-//     k_sleep(K_SECONDS(3));
-//   }
-
-//   /* triggered runs with its own thread after exit */
-// }
+// K_THREAD_DEFINE(imu_thread_id, 1024 * 2, imu_entry, NULL, NULL, NULL,
+//                 IMU_THREAD_PRIORITY, 0, 0);

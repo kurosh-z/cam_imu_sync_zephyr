@@ -23,7 +23,6 @@ void set_trigger_high_handler(struct k_work *work) {
 void set_trigger_high_now() { gpio_pin_set_dt(&trigger, 1); }
 
 int init_trigger_dev() {
-  printk("starting trigger ....\n");
 
   if (!device_is_ready(trigger.port)) {
 
@@ -49,12 +48,13 @@ void schedule_trigger_high(uint32_t delay_us) {
 };
 
 void trigger_entry(void) {
-  // wait for app to be initialized and exposure to be set
+  // wait for app to be initialized and exposure to be
+  printk("[trigger.c] starting trigger_entry \n");
   while (is_app_initialized() == false || get_exposure() == -1) {
     k_msleep(500);
   }
-  uint32_t start = 0;
-  uint32_t end = 0;
+  uint64_t start = 0;
+  uint64_t end = 0;
   struct imu_buff_t *buff1 = get_buffer1_ptr();
 
   if (buff1 == NULL) {
@@ -64,58 +64,27 @@ void trigger_entry(void) {
     }
   }
   while (1) {
-    start = k_cycle_get_32();
-    set_trigger_high_now();
-    schedule_trigger_low(TOGGLE_DELAY_US);
-    // schedule imu_read
-    uint32_t exposure_ms = get_exposure();
-    uint32_t time_delay_us = exposure_ms * 1000 / 2 - IMU_READ_TIME_US / 2;
-    buff1->trig_timestamp = k_cyc_to_us_floor32(start);
-    buff1->trig_seq++;
-    schedule_imu_read_triggered(time_delay_us);
-    // TODO: should you also send  imu data here?
-    k_sleep(K_USEC(TRIGGER_INTERVAL_US - 108));
-    // k_msleep(4);
-    end = k_cycle_get_32();
-    // printk("trigger interval: %d us\n", k_cyc_to_us_floor32(end - start));
+    if (get_trigger_state() == TRIGGER_STATE_START) {
+      start = k_uptime_ticks();
+      set_trigger_high_now();
+      schedule_trigger_low(TOGGLE_DELAY_US);
+      // schedule imu_read
+      uint32_t exposure_ms = get_exposure();
+      uint32_t time_delay_us = exposure_ms * 1000 / 2 - IMU_READ_TIME_US / 2;
+      buff1->trig_timestamp = k_ticks_to_us_floor64(start);
+      buff1->trig_seq++;
+      schedule_imu_read_triggered(time_delay_us);
+      // TODO: should we already send imu data here?
+      k_sleep(K_USEC(TRIGGER_INTERVAL_US - 108));
+      // k_msleep(4);
+      end = k_ticks_to_us_floor64(k_uptime_ticks());
+      // printk("trigger interval: %d us\n", k_cyc_to_us_floor32(end - start));
+    } else {
+      // wait and check trigger_state after 10ms
+      k_msleep(10);
+    }
   }
 }
 
-K_THREAD_DEFINE(trigger_thread_id, 2048, trigger_entry, NULL, NULL, NULL,
-                TRIGGER_THREAD_PRIORITY, 0, 0);
-
-// void trigger_entry(void) {
-
-//   SEGGER_RTT_Init();
-//   k_msleep(1000);
-//   init_trigger_dev();
-//   printk("starting trigger ....\n");
-//   int ret;
-
-//   if (!device_is_ready(trigger.port)) {
-//     while (1) {
-//       printk("Error: %s device is not ready", trigger.port->name);
-//       k_msleep(5000);
-//     }
-
-//   } else {
-//     printk(" %s device is ready! \n", trigger.port->name);
-//   }
-
-//   ret = gpio_pin_configure_dt(&trigger, GPIO_OUTPUT_LOW);
-//   if (ret < 0) {
-//     return;
-//   }
-
-//   while (1) {
-
-//     gpio_pin_set_dt(&trigger, 1);
-//     printk("toggling hight \n");
-//     // k_msleep(SLEEP_TIME_MS);
-//     // gpio_pin_set_dt(&trigger, 0);
-//     set_trigger_low(1500);
-//     printk("toggling low \n");
-//     k_msleep(3000);
-//     printk("\n----------------------\n");
-//   }
-// }
+// K_THREAD_DEFINE(trigger_thread_id, 2048, trigger_entry, NULL, NULL, NULL,
+//                 TRIGGER_THREAD_PRIORITY, 0, 0);
