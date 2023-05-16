@@ -16,6 +16,7 @@ const struct device *uart = DEVICE_DT_GET(DT_NODELABEL(uart0));
 static uint8_t tx_buf[TX_BUFF_SIZE] = {0};
 static uint8_t rx_buf[RECEIVE_BUFF_SIZE] = {0};
 static const uint8_t end_of_msg[END_OF_MSG_LEN] = END_OF_MSG;
+static struct received_msg_t received_msg = {.msg = {0}, .len = 0};
 
 static struct app_response_queue_t response_queue = {
     .head = 0,
@@ -65,7 +66,27 @@ void send_response_handler(struct k_work *work) {
   }
 }
 
-static void parse_command(uint8_t *data, size_t len) {
+static void parse_command(uint8_t *data, size_t len, size_t offset) {
+
+  size_t new_len = received_msg.len + len;
+  if (new_len > RECEIVE_BUFF_SIZE) {
+    printk("[uart_com.c/parse_command] WARN parse_command: buffer overflow\n");
+    // reset the buffer
+    received_msg.len = 0;
+    memset(received_msg.msg, 0, sizeof(received_msg.msg));
+    return;
+  }
+  memcpy(&received_msg.msg[received_msg.len], data + offset, len);
+  received_msg.len = new_len;
+  // check if the message is complete
+  bool msg_complete = false;
+  size_t idx = new_len - END_OF_MSG_LEN;
+  if (strncmp(&received_msg.msg[idx], end_of_msg, END_OF_MSG_LEN) == 0)
+    msg_complete = true;
+
+  if (!msg_complete) {
+    return;
+  }
 
   bool response_scheduled = false;
   printk("\n-------------------------------\n");
@@ -74,28 +95,28 @@ static void parse_command(uint8_t *data, size_t len) {
   //   printk("%x ", data[i]);
   // printk("\n");
 
-  if (strncmp(data, CMD_SET_EXPOSURE, 17) == 0) {
-    uint32_t exposure_ms = sys_get_be32(&data[17]);
+  if (strncmp(received_msg.msg, CMD_SET_EXPOSURE, 16) == 0) {
+    uint32_t exposure_ms = sys_get_be32(&data[16]);
     printk("[uart_com.c] parse_command:CMD_SET_EXPOSURE = %d\n", exposure_ms);
     uint32_t new_exposure = set_exposure(exposure_ms);
     for (uint8_t i = 0; i < RESPONSE_QUEUE_SIZE; i++) {
       if (response_queue.queue[i].state == UART_RESPONSE_SENT) {
-        memcpy(response_queue.queue[i].resp, RESP_SET_EXPOSURE, 18); // 18 bytes
+        memcpy(response_queue.queue[i].resp, RESP_SET_EXPOSURE, 17); // 17 bytes
         sys_put_be32(new_exposure,
-                     &response_queue.queue[i].resp[18]); // + 4 bytes
-        response_queue.queue[i].len = 22;
+                     &response_queue.queue[i].resp[17]); // + 4 bytes
+        response_queue.queue[i].len = 21;
         response_queue.queue[i].state = UART_RESPONSE_WAITING;
         response_scheduled = true;
         break;
       }
     }
-  } else if (strncmp(data, CMD_GET_EXPOSURE, 16) == 0) {
+  } else if (strncmp(received_msg.msg, CMD_GET_EXPOSURE, 16) == 0) {
     uint32_t exposure_ms = get_exposure();
     printk("[uart_com.c] parse_command:CMD_GET_EXPOSURE = %d\n", exposure_ms);
     for (uint8_t i = 0; i < RESPONSE_QUEUE_SIZE; i++) {
       if (response_queue.queue[i].state == UART_RESPONSE_SENT) {
         memcpy(response_queue.queue[i].resp, RESP_GET_EXPOSURE, 17); // 17 bytes
-        sys_put_be16(exposure_ms,
+        sys_put_be32(exposure_ms,
                      &response_queue.queue[i].resp[17]); // + 4 bytes
 
         response_queue.queue[i].len = 21;
@@ -104,40 +125,42 @@ static void parse_command(uint8_t *data, size_t len) {
         break;
       }
     }
-  } else if (strncmp(data, CMD_SET_TRIGGER, 16) == 0) {
-    uint8_t trigger_mode = data[16];
+  } else if (strncmp(received_msg.msg, CMD_SET_TRIGGER, 15) == 0) {
+    uint8_t trigger_mode = received_msg.msg[15];
     printk("[uart_com.c] parse_command:CMD_SET_TRIGGER = %d\n", trigger_mode);
     uint8_t new_trigger_mode = set_trigger_state(trigger_mode);
     for (uint8_t i = 0; i < RESPONSE_QUEUE_SIZE; i++) {
       if (response_queue.queue[i].state == UART_RESPONSE_SENT) {
-        memcpy(response_queue.queue[i].resp, RESP_SET_TRIGGER, 17); // 17 bytes
-        response_queue.queue[i].resp[17] = new_trigger_mode;        // + 1 byte
-        response_queue.queue[i].len = 18;
+        memcpy(response_queue.queue[i].resp, RESP_SET_TRIGGER, 16); // 16 bytes
+        response_queue.queue[i].resp[16] = new_trigger_mode;        // + 1 byte
+        response_queue.queue[i].len = 17;
         response_queue.queue[i].state = UART_RESPONSE_WAITING;
         response_scheduled = true;
         break;
       }
     }
-  } else if (strncmp(data, CMD_GET_TRIGGER, 16) == 0) {
+  } else if (strncmp(received_msg.msg, CMD_GET_TRIGGER, 15) == 0) {
     uint8_t trigger_mode = get_trigger_state();
     printk("[uart_com.c] parse_command:CMD_GET_TRIGGER = %d\n", trigger_mode);
     for (uint8_t i = 0; i < RESPONSE_QUEUE_SIZE; i++) {
       if (response_queue.queue[i].state == UART_RESPONSE_SENT) {
-        memcpy(response_queue.queue[i].resp, RESP_GET_TRIGGER, 17); // 17 bytes
-        response_queue.queue[i].resp[17] = trigger_mode;            // + 1 byte
-        response_queue.queue[i].len = 18;
+        memcpy(response_queue.queue[i].resp, RESP_GET_TRIGGER, 16); // 16 bytes
+        response_queue.queue[i].resp[16] = trigger_mode;            // + 1 byte
+        response_queue.queue[i].len = 17;
         response_queue.queue[i].state = UART_RESPONSE_WAITING;
         response_scheduled = true;
         break;
       }
     }
-  }
-
-  else {
+  } else {
     printk(
         "[uart_com.c/parse_command] parse_command: WARN: unknown command \n");
     return;
   }
+
+  // reset message
+  received_msg.len = 0;
+  memset(received_msg.msg, 0, RECEIVE_BUFF_SIZE);
 
   if (!response_scheduled) {
     printk("[uart_com.c/parse_command] parse_command: WARN: response queue "
@@ -156,11 +179,13 @@ static void uart_callback(const struct device *dev, struct uart_event *evt,
              "implemented  yet!"
              "\n");
     }
-    parse_command(evt->data.rx.buf, evt->data.rx.len);
+    printk("[uart_com.c/ uart_callback] offset: %d \n", evt->data.rx.offset);
+    parse_command(evt->data.rx.buf, evt->data.rx.len, evt->data.rx.offset);
+
     uart_rx_disable(dev);
     break;
   case UART_RX_DISABLED:
-    uart_rx_enable(dev, rx_buf, sizeof rx_buf, 1000);
+    uart_rx_enable(dev, rx_buf, sizeof rx_buf, RECEIVE_TIMEOUT_US);
   default:
     break;
   }
@@ -195,7 +220,7 @@ int init_uart_com() {
     return ret;
   }
   printk("[uart_com.c] uart_callback_set set \n");
-  uart_rx_enable(uart, rx_buf, sizeof rx_buf, 1000);
+  uart_rx_enable(uart, rx_buf, sizeof rx_buf, RECEIVE_TIMEOUT_US);
   // initializing send response work
   k_work_init_delayable(&send_response_work, send_response_handler);
   k_msleep(100);

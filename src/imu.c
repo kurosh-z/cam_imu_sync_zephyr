@@ -15,15 +15,15 @@ static inline void encode_int32(int32_t n, uint8_t *bytes) {
 
 static inline void put_sensor_val_to_buf(const struct sensor_value *val,
                                          uint8_t *buf, int i) {
-  // put valX  //  imu_seq + imu_timestamp -> 16 bytes
-  encode_int32(val[0].val1, buf + 16 + 24 * i);
-  encode_int32(val[0].val2, buf + 16 + 24 * i + 4); // +8 bytes
+  // put valX  //  "IMU" + imu_seq + imu_timestamp -> 19 bytes
+  encode_int32(val[0].val1, buf + 3 + 16 + 24 * i);
+  encode_int32(val[0].val2, buf + 3 + 16 + 24 * i + 4); // +8 bytes
   // put valY
-  encode_int32(val[1].val1, buf + 24 + 24 * i);
-  encode_int32(val[1].val2, buf + 24 + 24 * i + 4); // +8 bytes
+  encode_int32(val[1].val1, buf + 3 + 24 + 24 * i);
+  encode_int32(val[1].val2, buf + 3 + 24 + 24 * i + 4); // +8 bytes
   // put valZ
-  encode_int32(val[2].val1, buf + 32 + 24 * i);
-  encode_int32(val[2].val2, buf + 32 + 24 * i + 4); // +8 bytes
+  encode_int32(val[2].val1, buf + 3 + 32 + 24 * i);
+  encode_int32(val[2].val2, buf + 3 + 32 + 24 * i + 4); // +8 bytes
 }
 
 int process_mpu9250(bool triggered) {
@@ -55,11 +55,10 @@ int process_mpu9250(bool triggered) {
   }
 
   if (rc == 0) {
+    memcpy(imu_data, "IMU", 3); // 3 bytes
     uint64_t imu_seq = increase_imu_seq();
-    sys_put_be64(imu_seq, imu_data);
-    // 8 bytes
-    // sys_put_be32(k_cyc_to_us_floor32(start), imu_data + 8); // 4 bytes
-    sys_put_be64(imu_timestamp, imu_data + 8); // 8 bytes
+    sys_put_be64(imu_seq, imu_data + 3);        // + 8 bytes
+    sys_put_be64(imu_timestamp, imu_data + 11); // +8 bytes
 
     for (int i = 0; i < 3; i++) {
       switch (i) {
@@ -77,17 +76,16 @@ int process_mpu9250(bool triggered) {
         break;
       }
     }
-    // 16 + 24*3 = 88 bytes
-    // TODO: add timestamp- add triggered flag to imu_data
+    // 19 + 24*3 = 91 bytes
     if (triggered) {
-      imu_data[88] = triggered;                                  // 1 byte
-      sys_put_be64(get_buffer1_trig_seq(), imu_data + 89);       // 8 bytes
-      sys_put_be64(get_buffer1_trig_timestamp(), imu_data + 97); // 8 bytes
-      set_buffer1(imu_data, 107);
+      imu_data[91] = triggered;                                   // 1 byte
+      sys_put_be64(get_buffer1_trig_seq(), imu_data + 92);        // 8 bytes
+      sys_put_be64(get_buffer1_trig_timestamp(), imu_data + 100); // 8 bytes
+      set_buffer1(imu_data, 108);
       set_buffer1_state(IMU_BUFF_STATE_WAITING);
     } else {
-      imu_data[89] = triggered;
-      set_buffer2(imu_data, 90);
+      imu_data[91] = triggered;
+      set_buffer2(imu_data, 92);
       set_buffer2_state(IMU_BUFF_STATE_WAITING);
     }
 
@@ -130,5 +128,5 @@ void imu_entry(void) {
   }
 }
 
-// K_THREAD_DEFINE(imu_thread_id, 1024 * 2, imu_entry, NULL, NULL, NULL,
-//                 IMU_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(imu_thread_id, 1024 * 2, imu_entry, NULL, NULL, NULL,
+                IMU_THREAD_PRIORITY, 0, 0);

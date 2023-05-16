@@ -11,7 +11,10 @@
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/printk.h>
 
-#define RECEIVE_TIMEOUT_MS 500
+#define RECEIVE_TIMEOUT_US                                                     \
+  18000 // setting this too low will cause UART_RX_RDY to be triggered in
+        // between the transmission of a message then you have to take care of
+        // the offset in rx buffer to get the entire message
 #define RECEIVE_BUFF_SIZE 128
 #define TX_BUFF_SIZE 256
 #define TX_BUFF_TIMEOUT_US 100 * 1000
@@ -34,6 +37,11 @@ struct app_response_t {
 struct app_response_queue_t {
   struct app_response_t queue[RESPONSE_QUEUE_SIZE];
   uint8_t head;
+};
+
+struct received_msg_t {
+  uint8_t msg[RECEIVE_BUFF_SIZE];
+  size_t len;
 };
 
 int init_uart_com();

@@ -86,5 +86,5 @@ void trigger_entry(void) {
   }
 }
 
-// K_THREAD_DEFINE(trigger_thread_id, 2048, trigger_entry, NULL, NULL, NULL,
-//                 TRIGGER_THREAD_PRIORITY, 0, 0);
+K_THREAD_DEFINE(trigger_thread_id, 2048, trigger_entry, NULL, NULL, NULL,
+                TRIGGER_THREAD_PRIORITY, 0, 0);
