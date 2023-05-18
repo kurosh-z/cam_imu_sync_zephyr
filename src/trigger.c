@@ -70,14 +70,16 @@ void trigger_entry(void) {
       schedule_trigger_low(TOGGLE_DELAY_US);
       // schedule imu_read
       uint32_t exposure_ms = get_exposure();
-      uint32_t time_delay_us = exposure_ms * 1000 / 2 - IMU_READ_TIME_US / 2;
+      uint32_t time_delay_us =
+          (double)exposure_ms * 1000 / 2 - (double)IMU_READ_TIME_US / 2;
       buff1->trig_timestamp = k_ticks_to_us_floor64(start);
       buff1->trig_seq++;
+      set_next_scheduled_imu_trig_read(buff1->trig_timestamp + time_delay_us);
       schedule_imu_read_triggered(time_delay_us);
       // TODO: should we already send imu data here?
       k_sleep(K_USEC(TRIGGER_INTERVAL_US - 108));
       // k_msleep(4);
-      end = k_ticks_to_us_floor64(k_uptime_ticks());
+      // end = k_ticks_to_us_floor64(k_uptime_ticks());
       // printk("trigger interval: %d us\n", k_cyc_to_us_floor32(end - start));
     } else {
       // wait and check trigger_state after 10ms

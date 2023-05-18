@@ -25,7 +25,7 @@ static inline void put_sensor_val_to_buf(const struct sensor_value *val,
   encode_int32(val[2].val1, buf + 3 + 32 + 24 * i);
   encode_int32(val[2].val2, buf + 3 + 32 + 24 * i + 4); // +8 bytes
 }
-
+uint64_t last_imu_read = 0;
 int process_mpu9250(bool triggered) {
   if (mpu9250_dev == NULL) {
     printk("mpu9250_dev is NULL");
@@ -40,6 +40,18 @@ int process_mpu9250(bool triggered) {
   struct sensor_value magn[3];
 
   uint64_t imu_timestamp = k_ticks_to_us_floor64(k_uptime_ticks());
+
+  // return if last reading happened was less than the time needed to read imu
+  // data (IMU_READ_TIME_US) + around 240 us (sending time)
+  if (get_next_scheduled_imu_trig_read() - imu_timestamp <
+          IMU_READ_TIME_US + 240 &&
+      !triggered) {
+    // printk("returning early\n");
+    return -100;
+  } else {
+    // printk("diff %lld \n", imu_timestamp - last_imu_read);
+    last_imu_read = imu_timestamp;
+  }
   int rc = sensor_sample_fetch(mpu9250_dev);
   // uint32_t end = k_cycle_get_32();
   // uint32_t process_delay_us = k_cyc_to_us_floor32(end - start);
@@ -83,10 +95,12 @@ int process_mpu9250(bool triggered) {
       sys_put_be64(get_buffer1_trig_timestamp(), imu_data + 100); // 8 bytes
       set_buffer1(imu_data, 108);
       set_buffer1_state(IMU_BUFF_STATE_WAITING);
+      submit_send_trigger();
     } else {
       imu_data[91] = triggered;
       set_buffer2(imu_data, 92);
       set_buffer2_state(IMU_BUFF_STATE_WAITING);
+      submit_send_imu();
     }
 
     // imu_data[80] = triggered;                      // 1 byte
@@ -109,6 +123,8 @@ int init_imu() {
   if (!device_is_ready(mpu9250_dev)) {
     printk("Device mpu9250 is not ready!\n");
     return -1;
+  } else {
+    printk("Device mpu9250 is ready!\n");
   }
   k_work_init_delayable(&imu_read_work, imu_read_handler_triggered);
   return 0;

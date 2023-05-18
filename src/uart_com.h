@@ -46,5 +46,7 @@ struct received_msg_t {
 
 int init_uart_com();
 int send_data_uart(uint8_t buff_num);
+void submit_send_imu();
+void submit_send_trigger();
 
 #endif

@@ -17,6 +17,9 @@ static uint8_t tx_buf[TX_BUFF_SIZE] = {0};
 static uint8_t rx_buf[RECEIVE_BUFF_SIZE] = {0};
 static const uint8_t end_of_msg[END_OF_MSG_LEN] = END_OF_MSG;
 static struct received_msg_t received_msg = {.msg = {0}, .len = 0};
+static struct k_work send_trigger_work;
+static struct k_work send_imu_work;
+static struct k_work_delayable send_response_work;
 
 static struct app_response_queue_t response_queue = {
     .head = 0,
@@ -26,7 +29,23 @@ static struct app_response_queue_t response_queue = {
         {.resp = {0}, .len = 0, .state = UART_RESPONSE_SENT},
     }};
 
-static struct k_work_delayable send_response_work;
+void send_imu_handler(struct k_work *work) {
+
+  if (get_buffer2_state() == IMU_BUFF_STATE_WAITING) {
+    send_data_uart(2);
+    set_buffer2_state(IMU_BUFF_STATE_SENT);
+  }
+}
+
+void send_trigger_handler(struct k_work *work) {
+  if (get_buffer1_state() == IMU_BUFF_STATE_WAITING) {
+    send_data_uart(1);
+    set_buffer1_state(IMU_BUFF_STATE_SENT);
+  }
+}
+
+void submit_send_imu() { k_work_submit(&send_imu_work); }
+void submit_send_trigger() { k_work_submit(&send_trigger_work); }
 
 void send_response_handler(struct k_work *work) {
   bool sent = false;
@@ -223,6 +242,9 @@ int init_uart_com() {
   uart_rx_enable(uart, rx_buf, sizeof rx_buf, RECEIVE_TIMEOUT_US);
   // initializing send response work
   k_work_init_delayable(&send_response_work, send_response_handler);
+  k_work_init(&send_trigger_work, send_trigger_handler);
+  k_work_init(&send_imu_work, send_imu_handler);
+
   k_msleep(100);
   printk("[uart_com.c] uart_callback_set success \n");
   return 0;
@@ -275,9 +297,9 @@ void uart_entry(void) {
       send_data_uart(2);
       set_buffer2_state(IMU_BUFF_STATE_SENT);
     }
-    k_sleep(K_USEC(500));
+    k_sleep(K_USEC(200));
   }
 }
 
-K_THREAD_DEFINE(uart_thread_id, 2 * 1024, uart_entry, NULL, NULL, NULL,
-                UART_THREAD_PRIORITY, 0, 0);
+// K_THREAD_DEFINE(uart_thread_id, 2 * 1024, uart_entry, NULL, NULL, NULL,
+//                 UART_THREAD_PRIORITY, 0, 0);

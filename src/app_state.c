@@ -7,6 +7,7 @@ struct app_state_t app_state = {
     .error = NO_ERROR,
     .initialized = false,
     .exposure = 12,
+    .next_scheduled_imu_trig_read = 0,
     .imu_buff1 =
         {
             .data = {0},
@@ -35,6 +36,13 @@ void set_current_state(app_state_t *state) {
   memcpy(&app_state, state, sizeof(app_state_t));
 };
 
+uint64_t get_next_scheduled_imu_trig_read() {
+  return app_state.next_scheduled_imu_trig_read;
+}
+
+void set_next_scheduled_imu_trig_read(uint64_t next) {
+  app_state.next_scheduled_imu_trig_read = next;
+}
 void set_buffer1(uint8_t *imu_data, size_t len) {
   memcpy(app_state.imu_buff1.data, imu_data, len);
   app_state.imu_buff1.len = len;

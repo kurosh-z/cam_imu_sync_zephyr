@@ -9,16 +9,16 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/sys/printk.h>
 
-#define TOGGLE_DELAY_US 600
+#define TOGGLE_DELAY_US 300
 #define TRIG_SEQ_DEVISOR 25
 #define IMU_READ_TIME_US                                                       \
   2380 // measured experimentally and took an average of 100 readings
 #define IMU_DATA_MAX_LEN 128
 #define TRIGGER_INTERVAL_US 40 * 1000
 
-#define UART_THREAD_PRIORITY 5
+#define UART_THREAD_PRIORITY 4
 #define IMU_THREAD_PRIORITY 3
-#define TRIGGER_THREAD_PRIORITY 1
+#define TRIGGER_THREAD_PRIORITY 2
 
 // define commands
 // define trigger commands:
@@ -61,6 +61,7 @@ typedef struct app_state_t {
   bool initialized;
   uint8_t error;
   uint8_t trigger_state;
+  uint64_t next_scheduled_imu_trig_read;
   uint32_t exposure; // in milliseconds [ms]
   uint64_t imu_seq;
   uint64_t trigger_seq;
@@ -72,6 +73,9 @@ typedef struct app_state_t {
 
 void get_current_state(app_state_t *state);
 void set_current_state(app_state_t *state);
+
+uint64_t get_next_scheduled_imu_trig_read();
+void set_next_scheduled_imu_trig_read(uint64_t next);
 
 void set_buffer1(uint8_t *imu_data, size_t len);
 void get_buffer1(uint8_t *imu_data);
